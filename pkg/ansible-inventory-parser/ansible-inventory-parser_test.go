@@ -29,7 +29,7 @@ func TestIsKeyVal(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := IsKeyVal(tt.args.row); got != tt.want {
+			if got := isKeyVal(tt.args.row); got != tt.want {
 				t.Errorf("IsKeyVal() = %v, want %v", got, tt.want)
 			}
 		})

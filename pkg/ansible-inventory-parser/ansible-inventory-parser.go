@@ -11,11 +11,21 @@ func New() {
 
 }
 
-type Inventory struct {
-	All
+type All struct {
+	Groups []Group
+	Vars   map[string]string
+}
+type Host struct {
+	Name   string
+	Vars   map[string]string
+	Indent int
 }
 
-type All struct {
+type Group struct {
+	Hosts     []Host
+	SubGroups []Group
+	Vars      map[string]string
+	Indent    int
 }
 
 func Parse(filepath string) error {
@@ -30,36 +40,81 @@ func Parse(filepath string) error {
 	scanner := bufio.NewScanner(file)
 	groups := make(map[int]string)
 
+	// indicate the hosts indent level
+	var hostIndentLvl int
 	// Read and print the lines.
 	for scanner.Scan() {
 		row := scanner.Text()
 
 		// get indentation level and remove trialing and leading spaces.
-		indetLvl := IndentationLevel(row)
+		indentLvl := indentationLevel(row)
 		row = strings.TrimSpace(row)
 
 		// get the inline comment and remove it.
 		// inlineComment := InlineComment(row)
 		row = strings.Split(row, "#")[0]
 
+		// the hosts are on the level of the hosts key word plus 1.
+		if row == "hosts:" {
+			hostIndentLvl = indentLvl + 1
+		}
+
 		// update the group for the indentation level.
 		updateGroup(groups, row, *scanner)
 
-		fmt.Printf("indent level: %d, %s\n", indetLvl, row)
-		// fmt.Printf("inlineComment: %s, %s\n", inlineComment, row)
-		fmt.Printf("group: %s, %s\n", groups[indetLvl], row)
-
-		if IsKeyVal(row) {
-			fmt.Println("key", row)
+		if IsHost(indentLvl, hostIndentLvl) {
+			host := getHostDetails(indentLvl, *scanner, row)
+			fmt.Printf("%+v\n", host)
 		}
+
+		// fmt.Printf("indent level: %d, %s\n", indentLvl, row)
+		// // fmt.Printf("inlineComment: %s, %s\n", inlineComment, row)
+		// fmt.Printf("group: %s, %s\n", groups[indentLvl], row)
+		// fmt.Printf("host group: %s, %s\n", groups[hostIndentLvl], row)
+
 	}
 
 	if err := scanner.Err(); err != nil {
 		return err
 	}
-	fmt.Printf("%+v\n", groups)
+	// fmt.Printf("%+v\n", groups)
 
 	return nil
+
+}
+
+// checks if the host is on the host level.
+func IsHost(indentLvl, hostIndentLvl int) bool {
+	return indentLvl == hostIndentLvl
+
+}
+
+func getHostDetails(indentLvl int, scanner bufio.Scanner, row string) Host {
+	host := Host{
+		Name:   strings.Split(row, ":")[0],
+		Indent: indentLvl,
+	}
+	host.Vars = make(map[string]string)
+	for scanner.Scan() {
+		row := scanner.Text()
+
+		// get indentation level and remove trialing and leading spaces.
+		rowIndentLvl := indentationLevel(row)
+
+		// TODO: check if i need to support more types other then key value.
+		// check if the level of the indentation is different from 1 level above the indentation of the host.
+		if rowIndentLvl != indentLvl+1 {
+			break
+		}
+		row = strings.TrimSpace(row)
+
+		s := strings.Split(row, ":")
+		if len(s) == 2 {
+			host.Vars[strings.Split(s[0], ":")[0]] = strings.Split(s[1], ":")[0]
+		}
+	}
+
+	return host
 
 }
 
@@ -73,7 +128,7 @@ func updateGroup(groups map[int]string, row string, scanner bufio.Scanner) {
 
 	// +1 because we want to update the row after the "hosts" line.
 	// read the next line to check if the it's the start of a new group.
-	indetLvl := IndentationLevel(nextRow) + 1
+	indetLvl := indentationLevel(nextRow) + 1
 	nextRow = strings.TrimSpace(nextRow)
 	nextRow = strings.Split(nextRow, "#")[0]
 
@@ -83,25 +138,25 @@ func updateGroup(groups map[int]string, row string, scanner bufio.Scanner) {
 
 }
 
-// IsKeyVal checks if it's a key val row or only key.
-func IsKeyVal(row string) bool {
+// isKeyVal checks if it's a key val row or only key.
+func isKeyVal(row string) bool {
 	s := strings.Split(row, ":")
 	// if the len is two then it's a key value row.
 	return len(s) == 2 && s[1] != ""
 }
 
-// IsHeadComment checks if the row is a comment.
-func IsHeadComment(row string) bool {
+// isHeadComment checks if the row is a comment.
+func isHeadComment(row string) bool {
 	return strings.HasPrefix(row, "#")
 }
 
-// IndentationLevel returns the indentation level of the row.
-func IndentationLevel(row string) int {
+// indentationLevel returns the indentation level of the row.
+func indentationLevel(row string) int {
 	return (len(row) - len(strings.TrimLeft(row, " "))) / 2
 }
 
-// InlineComment will return the inline comment.
-func InlineComment(row string) string {
+// inlineComment will return the inline comment.
+func inlineComment(row string) string {
 	s := strings.Split(row, "#")
 	if len(s) == 2 {
 		return s[1]

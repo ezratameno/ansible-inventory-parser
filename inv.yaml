@@ -1,32 +1,10 @@
 all:
   hosts:
     mail.example.com:
-  children:
-    webservers:
-      hosts:
-        # HEAD comment.
-        foo.example.com:
-        bar.example.com: #inline comment.
-    dbservers:
-      hosts:
-        one.example.com:
-        two.example.com:
-        three.example.com:
-    east:
-      hosts:
-        foo.example.com:
-        one.example.com:
-        two.example.com:
-    west:
-      hosts:
-        bar.example.com:
-        three.example.com:
-    prod:
-      hosts:
-        foo.example.com:
-        one.example.com:
-        two.example.com:
-    test:
-      hosts:
-        bar.example.com:
-        three.example.com:
+      ansible_host: 18.0454.56
+      ip: 18.0454.56
+      access_ip: 18.0454.56
+    ezra.example.com:
+      ansible_host: 1151
+      ip: 1151
+      access_ip: 1151
