@@ -16,83 +16,125 @@ type All struct {
 	Vars   map[string]string
 }
 type Host struct {
-	Name   string
-	Vars   map[string]string
-	Indent int
-}
-
-type Group struct {
-	Hosts     []Host
-	SubGroups []Group
+	Name      string
+	GroupName string
 	Vars      map[string]string
 	Indent    int
 }
 
-func Parse(filepath string) error {
+type Group struct {
+	Name     string
+	Hosts    []Host
+	Children []Group
+	Vars     map[string]string
+	Indent   int
+}
+
+func readContent(filepath string) ([]string, error) {
 	// Open the file.
 	file, err := os.Open(filepath)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer file.Close()
-
-	// Set up the scanner.
 	scanner := bufio.NewScanner(file)
-	groups := make(map[int]string)
 
-	// indicate the hosts indent level
-	var hostIndentLvl int
-	// Read and print the lines.
+	var res []string
 	for scanner.Scan() {
-		row := scanner.Text()
-
-		// get indentation level and remove trialing and leading spaces.
-		indentLvl := indentationLevel(row)
-		row = strings.TrimSpace(row)
-
-		// get the inline comment and remove it.
-		// inlineComment := InlineComment(row)
-		row = strings.Split(row, "#")[0]
-
-		// the hosts are on the level of the hosts key word plus 1.
-		if row == "hosts:" {
-			hostIndentLvl = indentLvl + 1
-		}
-
-		// update the group for the indentation level.
-		updateGroup(groups, row, *scanner)
-
-		if IsHost(indentLvl, hostIndentLvl) {
-			host := getHostDetails(indentLvl, *scanner, row)
-			fmt.Printf("%+v\n", host)
-		}
-
-		// fmt.Printf("indent level: %d, %s\n", indentLvl, row)
-		// // fmt.Printf("inlineComment: %s, %s\n", inlineComment, row)
-		// fmt.Printf("group: %s, %s\n", groups[indentLvl], row)
-		// fmt.Printf("host group: %s, %s\n", groups[hostIndentLvl], row)
-
+		res = append(res, scanner.Text())
 	}
 
-	if err := scanner.Err(); err != nil {
+	return res, nil
+}
+
+func Parse(filepath string) error {
+	inventoryFile, err := readContent(filepath)
+	if err != nil {
 		return err
 	}
-	// fmt.Printf("%+v\n", groups)
+	for i := 0; i < len(inventoryFile); i++ {
+		if isGroup(inventoryFile, i) {
+			fmt.Printf("group name: %s\n", inventoryFile[i])
+		}
+		var g Group
+		getHosts(inventoryFile, i, g)
 
+	}
 	return nil
 
 }
 
-// checks if the host is on the host level.
-func IsHost(indentLvl, hostIndentLvl int) bool {
-	return indentLvl == hostIndentLvl
+// getHosts checks if the host is on the host level.
+func getHosts(inventoryFile []string, i int, g Group) []Host {
+	if !(strings.TrimSpace(inventoryFile[i]) == "hosts:") {
+		return nil
+	}
+	// the line is the host file.
+	hostIndent := indentationLevel(inventoryFile[i]) + 1
+
+	// get all the hosts of this group.
+	for j := i + 1; j < len(inventoryFile); j++ {
+		indentLvl := indentationLevel(inventoryFile[j])
+
+		// if it's the children then is the start of a sub group.
+		if strings.Contains(inventoryFile[j], "children:") {
+			getHosts(inventoryFile, j, g)
+		}
+		if indentLvl != hostIndent {
+			break
+		}
+
+		// if we got heat then it's a host
+		varsIndent := indentLvl + 1
+		host := Host{
+			Name:   strings.Split(inventoryFile[j], ":")[0],
+			Indent: indentLvl,
+			Vars:   make(map[string]string),
+		}
+		// get the vars
+	inner:
+		for k := j + 1; k < len(inventoryFile); k++ {
+			indent := indentationLevel(inventoryFile[k])
+			if indent != varsIndent {
+				break inner
+			}
+			row := strings.TrimSpace(inventoryFile[k])
+
+			s := strings.Split(row, ":")
+			if len(s) == 2 {
+				host.Vars[strings.Split(s[0], ":")[0]] = strings.Split(s[1], ":")[0]
+			}
+			// skip this lines because we already got the vars from them.
+			j++
+		}
+		fmt.Printf("host %+v\n", host)
+
+	}
+
+	return nil
+}
+
+// isGroup test if the next line is the host row, meaning it's the start of a new group.
+func isGroup(inventoryFile []string, i int) bool {
+	for j := i + 1; j < len(inventoryFile); j++ {
+		row := inventoryFile[j]
+		row = strings.TrimSpace(row)
+		// if the len is 1 then it's not a comment line.
+		if len(strings.Split(row, "#")) == 1 {
+			return row == "hosts:"
+		}
+
+	}
+	return false
 
 }
 
-func getHostDetails(indentLvl int, scanner bufio.Scanner, row string) Host {
+// hostDetails returns the details of the host.
+func hostDetails(indentLvl int, scanner bufio.Scanner, row, groupName string) Host {
 	host := Host{
-		Name:   strings.Split(row, ":")[0],
-		Indent: indentLvl,
+		Name:      strings.Split(row, ":")[0],
+		Indent:    indentLvl,
+		GroupName: groupName,
 	}
 	host.Vars = make(map[string]string)
 	for scanner.Scan() {
@@ -128,12 +170,12 @@ func updateGroup(groups map[int]string, row string, scanner bufio.Scanner) {
 
 	// +1 because we want to update the row after the "hosts" line.
 	// read the next line to check if the it's the start of a new group.
-	indetLvl := indentationLevel(nextRow) + 1
+	indentLvl := indentationLevel(nextRow) + 1
 	nextRow = strings.TrimSpace(nextRow)
 	nextRow = strings.Split(nextRow, "#")[0]
 
 	if nextRow == "hosts:" {
-		groups[indetLvl] = strings.Split(row, ":")[0]
+		groups[indentLvl] = strings.Split(row, ":")[0]
 	}
 
 }

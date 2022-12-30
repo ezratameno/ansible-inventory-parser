@@ -1,6 +1,8 @@
 package ansibleinventoryparser
 
-import "testing"
+import (
+	"testing"
+)
 
 func TestIsKeyVal(t *testing.T) {
 	type args struct {
